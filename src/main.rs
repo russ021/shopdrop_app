@@ -181,7 +181,7 @@ async fn main() -> std::io::Result<()> {
             "sku-202".to_string(),
             Product {
                 id: "202".to_string(),
-                name: "Concurrency T-Shirt".to_string(),
+                name: "Linux T-Shirt".to_string(),
                 price: 24.99,
                 inventory: 13,
             },
