@@ -77,19 +77,62 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 async fn index() -> impl Responder {
     let html = r#"
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <title>Shopdrop - Live</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
+          Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+        background: #f5f5f5;
+        margin: 0;
+      }
+      header {
+        background: #333;
+        color: #fff;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+      #products {
+        list-style: none;
+        padding: 0;
+        margin: 1rem auto;
+        max-width: 800px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+      }
+      #products li {
+        background: #fff;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        transition: transform 0.1s ease-in-out;
+      }
+      #products li:hover {
+        transform: scale(1.02);
+      }
+      .price {
+        font-weight: bold;
+        color: #2a9d8f;
+      }
+      .inventory {
+        font-size: 0.9rem;
+        color: #555;
+      }
+    </style>
   </head>
   <body>
-    <h1>Shopdrop — Live Prices & Inventory</h1>
+    <header>
+      <h1>Shopdrop — Live Prices &amp; Inventory</h1>
+    </header>
     <ul id="products"></ul>
     <script>
       const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws');
       ws.onmessage = (ev) => {
         const data = JSON.parse(ev.data);
-        // data: { type: 'update', product }
         if (data.type === 'update') {
           const p = data.product;
           const id = 'p-' + p.id;
@@ -99,7 +142,9 @@ async fn index() -> impl Responder {
             el.id = id;
             document.getElementById('products').appendChild(el);
           }
-          el.textContent = `${p.name} — $${p.price.toFixed(2)} — ${p.inventory} in stock`;
+          el.innerHTML = `<div class="name">${p.name}</div>` +
+                         `<div class="price">$${p.price.toFixed(2)}</div>` +
+                         `<div class="inventory">${p.inventory} in stock</div>`;
         }
       };
     </script>
