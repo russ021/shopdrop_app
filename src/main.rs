@@ -80,7 +80,7 @@ async fn index() -> impl Responder {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>Shopdrop - Live</title>
+    <title>Welcome to Shopdrop</title>
     <style>
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
