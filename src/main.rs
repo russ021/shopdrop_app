@@ -74,53 +74,181 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for WsSession {
 }
 
 #[get("/")]
-async fn index() -> impl Responder {
-    let html = r#"
+async fn index() -> impl Responder {    println!("Serving index");    let html = r#"
 <!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Welcome to Shopdrop</title>
     <style>
+      :root {
+        --primary-color: #4f46e5;
+        --secondary-color: #06b6d4;
+        --background: #f8fafc;
+        --card-bg: #ffffff;
+        --text: #1e293b;
+        --text-muted: #64748b;
+        --border: #e2e8f0;
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        --shadow-hover: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
       body {
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
-          Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
-        background: #f5f5f5;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        background: var(--background);
+        color: var(--text);
         margin: 0;
+        padding: 0;
+        line-height: 1.6;
       }
+
       header {
-        background: #333;
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
         color: #fff;
-        padding: 1rem;
+        padding: 2rem 1rem;
         text-align: center;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        box-shadow: var(--shadow);
       }
+
+      header h1 {
+        margin: 0;
+        font-size: 2.5rem;
+        font-weight: 700;
+      }
+
+      @media (max-width: 768px) {
+        header h1 {
+          font-size: 2rem;
+        }
+      }
+
       #products {
         list-style: none;
-        padding: 0;
-        margin: 1rem auto;
-        max-width: 800px;
+        padding: 2rem 1rem;
+        margin: 0 auto;
+        max-width: 1200px;
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 1rem;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
       }
+
       #products li {
-        background: #fff;
-        padding: 1rem;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        transition: transform 0.1s ease-in-out;
+        background: var(--card-bg);
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        transition: all 0.3s ease;
+        border: 1px solid var(--border);
       }
+
       #products li:hover {
-        transform: scale(1.02);
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-hover);
       }
+
+      .name {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        color: var(--text);
+      }
+
       .price {
-        font-weight: bold;
-        color: #2a9d8f;
+        font-weight: 700;
+        font-size: 1.5rem;
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
       }
+
       .inventory {
         font-size: 0.9rem;
-        color: #555;
+        color: var(--text-muted);
+      }
+
+      form {
+        max-width: 500px;
+        margin: 2rem auto;
+        background: var(--card-bg);
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        border: 1px solid var(--border);
+      }
+
+      form h2 {
+        margin-top: 0;
+        color: var(--text);
+        font-size: 1.5rem;
+        text-align: center;
+      }
+
+      form div {
+        margin-bottom: 1rem;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text);
+      }
+
+      input {
+        width: 100%;
+        padding: 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        font-size: 1rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+      }
+
+      input:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+      }
+
+      button {
+        width: 100%;
+        background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+        color: #fff;
+        border: none;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+
+      button:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--shadow-hover);
+      }
+
+      button:active {
+        transform: translateY(0);
+      }
+
+      @media (max-width: 768px) {
+        #products {
+          grid-template-columns: 1fr;
+          padding: 1rem;
+        }
+
+        form {
+          margin: 1rem;
+          padding: 1.5rem;
+        }
+
+        header {
+          padding: 1.5rem 1rem;
+        }
       }
     </style>
   </head>
@@ -129,6 +257,26 @@ async fn index() -> impl Responder {
       <h1>Shopdrop — Live Prices &amp; Inventory</h1>
     </header>
     <ul id="products"></ul>
+    <form id="add-product-form">
+      <h2>Add New Product</h2>
+      <div>
+        <label for="sku">SKU:</label>
+        <input type="text" id="sku" name="sku" required>
+      </div>
+      <div>
+        <label for="name">Name:</label>
+        <input type="text" id="name" name="name" required>
+      </div>
+      <div>
+        <label for="price">Price:</label>
+        <input type="number" id="price" name="price" step="0.01" required>
+      </div>
+      <div>
+        <label for="inventory">Inventory:</label>
+        <input type="number" id="inventory" name="inventory" required>
+      </div>
+      <button type="submit">Add Product</button>
+    </form>
     <script>
       const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws');
       ws.onmessage = (ev) => {
@@ -147,6 +295,32 @@ async fn index() -> impl Responder {
                          `<div class="inventory">${p.inventory} in stock</div>`;
         }
       };
+
+      document.getElementById('add-product-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const product = {
+          sku: formData.get('sku'),
+          name: formData.get('name'),
+          price: parseFloat(formData.get('price')),
+          inventory: parseInt(formData.get('inventory'))
+        };
+        try {
+          const response = await fetch('/api/products', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(product)
+          });
+          if (response.ok) {
+            e.target.reset();
+            alert('Product added successfully!');
+          } else {
+            alert('Error adding product: ' + response.statusText);
+          }
+        } catch (error) {
+          alert('Error: ' + error.message);
+        }
+      });
     </script>
   </body>
 </html>
@@ -165,6 +339,14 @@ async fn ws_index(req: HttpRequest, stream: web::Payload, data: web::Data<Arc<Ap
 struct Adjust {
     sku: String,
     delta: i32,
+}
+
+#[derive(Deserialize)]
+struct NewProduct {
+    sku: String,
+    name: String,
+    price: f64,
+    inventory: u32,
 }
 
 async fn list_products(data: web::Data<Arc<AppState>>) -> impl Responder {
@@ -205,9 +387,40 @@ async fn adjust_inventory(adj: web::Json<Adjust>, data: web::Data<Arc<AppState>>
     }
 }
 
+async fn add_product(new_prod: web::Json<NewProduct>, data: web::Data<Arc<AppState>>) -> impl Responder {
+    let mut map = data.products.write().await;
+    if map.contains_key(&new_prod.sku) {
+        return HttpResponse::Conflict().body("sku already exists");
+    }
+    let product = Product {
+        id: new_prod.sku.clone(), // using sku as id for simplicity
+        name: new_prod.name.clone(),
+        price: new_prod.price,
+        inventory: new_prod.inventory,
+    };
+    map.insert(new_prod.sku.clone(), product.clone());
+
+    // persist to sqlite
+    let prod_clone = product.clone();
+    let db_sku = new_prod.sku.clone();
+    tokio::task::spawn_blocking(move || {
+        if let Ok(conn) = Connection::open("shopdrop.db") {
+            let _ = conn.execute(
+                "INSERT INTO products (sku, id, name, price, inventory) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![db_sku, prod_clone.id, prod_clone.name, prod_clone.price, prod_clone.inventory],
+            );
+        }
+    });
+
+    let msg = serde_json::json!({"type":"update","product":&product});
+    let _ = data.broadcaster.send(msg.to_string());
+
+    HttpResponse::Created().json(product)
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    env_logger::init();
+    // env_logger::init();
 
     let (tx, _rx) = broadcast::channel(100);
 
@@ -310,6 +523,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(web::Data::new(state.clone()))
             .service(index)
             .route("/api/products", web::get().to(list_products))
+            .route("/api/products", web::post().to(add_product))
             .route("/api/adjust", web::post().to(adjust_inventory))
             .route("/ws", web::get().to(ws_index))
     })
