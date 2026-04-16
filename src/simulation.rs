@@ -7,17 +7,17 @@ use std::sync::Arc;
 use tokio::sync::broadcast;
 
 pub async fn start_simulation(state: Arc<AppState>, tx: broadcast::Sender<String>) {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
         let mut map: tokio::sync::RwLockWriteGuard<'_, std::collections::HashMap<String, Product>> = state.products.write().await;
         for (sku, prod) in map.iter_mut() {
             // random price change +/- up to 5%
-            let change = (rng.gen_range(-50i32..51) as f64) / 1000.0; // -5%..+5%
+            let change = (rng.random_range(-50i32..51) as f64) / 1000.0; // -5%..+5%
             prod.price = (prod.price * (1.0 + change) * 100.0).round() / 100.0;
             // random inventory change -0..2
-            if rng.gen_bool(0.3) && prod.inventory > 0 {
-                let dec = rng.gen_range(0..=2);
+            if rng.random_bool(0.3) && prod.inventory > 0 {
+                let dec = rng.random_range(0..=2);
                 prod.inventory = prod.inventory.saturating_sub(dec);
             }
 
