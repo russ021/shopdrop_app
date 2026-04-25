@@ -38,7 +38,3 @@ Open your browser to `http://127.0.0.1:8080` to view the live product dashboard.
 - `POST /api/products` - Add a new product (JSON body: `{"sku": "string", "name": "string", "price": number, "inventory": number}`)
 - `POST /api/adjust` - Adjust inventory for a product (JSON body: `{"sku": "string", "delta": number}`)
 - `GET /ws` - WebSocket endpoint for real-time updates
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
