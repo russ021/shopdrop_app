@@ -189,7 +189,7 @@ pub async fn index() -> impl Responder {
   </head>
   <body>
     <header>
-      <h1>Shopdrop — Inventory Live, Price Editable</h1>
+      <h1>Shopdrop — Live Inventory and product prices</h1>
     </header>
     <ul id="products"></ul>
     <form id="add-product-form">
