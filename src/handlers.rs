@@ -1,5 +1,5 @@
 use crate::db::insert_or_update_product;
-use crate::models::{Adjust, AppState, NewProduct, Product};
+use crate::models::{Adjust, AppState, NewProduct, PriceUpdate, Product};
 use actix_web::{get, web, HttpResponse, Responder};
 use actix_web_actors::ws;
 use rusqlite::Connection;
@@ -189,7 +189,7 @@ pub async fn index() -> impl Responder {
   </head>
   <body>
     <header>
-      <h1>Shopdrop — Live Prices &amp; Inventory</h1>
+      <h1>Shopdrop — Inventory Live, Price Editable</h1>
     </header>
     <ul id="products"></ul>
     <form id="add-product-form">
@@ -213,23 +213,65 @@ pub async fn index() -> impl Responder {
       <button type="submit">Add Product</button>
     </form>
     <script>
+      const productList = document.getElementById('products');
+
+      const renderProduct = (p) => {
+        const id = 'p-' + p.id;
+        let el = document.getElementById(id);
+        if (!el) {
+          el = document.createElement('li');
+          el.id = id;
+          productList.appendChild(el);
+        }
+        el.innerHTML = `
+          <div class="name">${p.name}</div>
+          <div class="price">$${p.price.toFixed(2)}</div>
+          <div class="inventory">${p.inventory} in stock</div>
+          <button class="edit-price">Edit Price</button>
+        `;
+        el.querySelector('.edit-price').addEventListener('click', async () => {
+          const updated = parseFloat(prompt('Enter new price for ' + p.name + ':', p.price));
+          if (isNaN(updated) || updated < 0) {
+            alert('Please enter a valid non-negative price.');
+            return;
+          }
+          try {
+            const resp = await fetch('/api/price', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sku: p.id, price: updated })
+            });
+            if (!resp.ok) {
+              alert('Error updating price: ' + resp.statusText);
+            }
+          } catch (err) {
+            alert('Error updating price: ' + err.message);
+          }
+        });
+      };
+
       const ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws');
       ws.onmessage = (ev) => {
         const data = JSON.parse(ev.data);
         if (data.type === 'update') {
           const p = data.product;
-          const id = 'p-' + p.id;
-          let el = document.getElementById(id);
-          if (!el) {
-            el = document.createElement('li');
-            el.id = id;
-            document.getElementById('products').appendChild(el);
-          }
-          el.innerHTML = `<div class="name">${p.name}</div>` +
-                         `<div class="price">$${p.price.toFixed(2)}</div>` +
-                         `<div class="inventory">${p.inventory} in stock</div>`;
+          renderProduct(p);
         }
       };
+
+      const fetchProducts = async () => {
+        try {
+          const response = await fetch('/api/products');
+          if (response.ok) {
+            const products = await response.json();
+            products.forEach(renderProduct);
+          }
+        } catch (err) {
+          console.warn('Could not fetch product list:', err);
+        }
+      };
+
+      fetchProducts();
 
       document.getElementById('add-product-form').addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -311,6 +353,40 @@ pub async fn adjust_inventory(
         let msg = serde_json::json!({"type":"update","product":prod});
         if let Err(e) = data.broadcaster.send(msg.to_string()) {
             log::debug!("No active WebSocket listeners for adjust_inventory: {}", e);
+        }
+
+        Ok(HttpResponse::Ok().json(prod))
+    } else {
+        Ok(HttpResponse::NotFound().body("sku not found"))
+    }
+}
+
+pub async fn update_price(
+    update: web::Json<PriceUpdate>,
+    data: web::Data<Arc<AppState>>,
+) -> Result<impl Responder, actix_web::Error> {
+    let mut map: tokio::sync::RwLockWriteGuard<'_, std::collections::HashMap<String, Product>> = data.products.write().await;
+    if let Some(prod) = map.get_mut(&update.sku) {
+        prod.price = update.price;
+
+        let prod_clone = prod.clone();
+        let db_sku = update.sku.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = match Connection::open("shopdrop.db") {
+                Ok(c) => c,
+                Err(e) => {
+                    log::error!("Failed to open DB for update_price: {}", e);
+                    return;
+                }
+            };
+            if let Err(e) = insert_or_update_product(&conn, &db_sku, &prod_clone) {
+                log::error!("Failed to update product price in DB: {}", e);
+            }
+        });
+
+        let msg = serde_json::json!({"type":"update","product":prod});
+        if let Err(e) = data.broadcaster.send(msg.to_string()) {
+            log::debug!("No active WebSocket listeners for update_price: {}", e);
         }
 
         Ok(HttpResponse::Ok().json(prod))

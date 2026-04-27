@@ -60,6 +60,7 @@ async fn main() -> std::io::Result<()> {
             .service(handlers::index)
             .route("/api/products", web::get().to(handlers::list_products))
             .route("/api/products", web::post().to(handlers::add_product))
+            .route("/api/price", web::post().to(handlers::update_price))
             .route("/api/adjust", web::post().to(handlers::adjust_inventory))
             .route("/ws", web::get().to(handlers::ws_index))
     })

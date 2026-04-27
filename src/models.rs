@@ -32,6 +32,12 @@ pub struct Adjust {
 }
 
 #[derive(Deserialize)]
+pub struct PriceUpdate {
+    pub sku: String,
+    pub price: f64,
+}
+
+#[derive(Deserialize)]
 pub struct NewProduct {
     pub sku: String,
     pub name: String,
