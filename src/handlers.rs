@@ -1,5 +1,5 @@
 use crate::db::insert_or_update_product;
-use crate::models::{Adjust, AppState, NewProduct, PriceUpdate, Product};
+use crate::models::{Adjust, AppState, NewProduct, PriceUpdate, Product, ReviewAction, ReviewStatus};
 use actix_web::{get, web, HttpResponse, Responder};
 use actix_web_actors::ws;
 use rusqlite::Connection;
@@ -198,9 +198,29 @@ pub async fn index() -> impl Responder {
         <label for="sku">SKU:</label>
         <input type="text" id="sku" name="sku" required>
       </div>
-      <div>
+        <div>
         <label for="name">Name:</label>
         <input type="text" id="name" name="name" required>
+      </div>
+      <div>
+        <label for="brand">Brand:</label>
+        <input type="text" id="brand" name="brand" required>
+      </div>
+      <div>
+        <label for="model">Model:</label>
+        <input type="text" id="model" name="model" required>
+      </div>
+      <div>
+        <label for="condition">Condition:</label>
+        <input type="text" id="condition" name="condition" required placeholder="Open-box, Refurbished, Like New">
+      </div>
+      <div>
+        <label for="warranty">Warranty:</label>
+        <input type="text" id="warranty" name="warranty" placeholder="e.g. 90-day">
+      </div>
+      <div>
+        <label for="review_notes">Review Notes:</label>
+        <input type="text" id="review_notes" name="review_notes" placeholder="Inspection comments">
       </div>
       <div>
         <label for="price">Price:</label>
@@ -279,6 +299,11 @@ pub async fn index() -> impl Responder {
         const product = {
           sku: formData.get('sku'),
           name: formData.get('name'),
+          brand: formData.get('brand'),
+          model: formData.get('model'),
+          condition: formData.get('condition'),
+          warranty: formData.get('warranty'),
+          review_notes: formData.get('review_notes'),
           price: parseFloat(formData.get('price')),
           inventory: parseInt(formData.get('inventory'))
         };
@@ -316,9 +341,60 @@ pub async fn ws_index(
     ws::start(session, &req, stream)
 }
 
+pub async fn list_pending_products(data: web::Data<Arc<AppState>>) -> impl Responder {
+    let map: tokio::sync::RwLockReadGuard<'_, std::collections::HashMap<String, Product>> = data.products.read().await;
+    let vals: Vec<&Product> = map
+        .values()
+        .filter(|product| !product.status.is_public())
+        .collect();
+    HttpResponse::Ok().json(vals)
+}
+
+pub async fn review_product(
+    review: web::Json<ReviewAction>,
+    data: web::Data<Arc<AppState>>,
+) -> Result<impl Responder, actix_web::Error> {
+    let mut map: tokio::sync::RwLockWriteGuard<'_, std::collections::HashMap<String, Product>> = data.products.write().await;
+    if let Some(prod) = map.get_mut(&review.sku) {
+        let action_lower = review.action.to_lowercase();
+        prod.status = match action_lower.as_str() {
+            "approve" | "approved" => ReviewStatus::Approved,
+            "reject" | "rejected" => ReviewStatus::Rejected,
+            _ => ReviewStatus::Review,
+        };
+        if let Some(notes) = &review.notes {
+            prod.review_notes = Some(notes.clone());
+        }
+
+        let prod_clone = prod.clone();
+        let db_sku = review.sku.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = match Connection::open("shopdrop.db") {
+                Ok(c) => c,
+                Err(e) => {
+                    log::error!("Failed to open DB for review_product: {}", e);
+                    return;
+                }
+            };
+            if let Err(e) = insert_or_update_product(&conn, &db_sku, &prod_clone) {
+                log::error!("Failed to update product review status in DB: {}", e);
+            }
+        });
+
+        let msg = serde_json::json!({"type":"update","product":prod});
+        if let Err(e) = data.broadcaster.send(msg.to_string()) {
+            log::debug!("No active WebSocket listeners for review_product: {}", e);
+        }
+
+        Ok(HttpResponse::Ok().json(prod))
+    } else {
+        Ok(HttpResponse::NotFound().body("sku not found"))
+    }
+}
+
 pub async fn list_products(data: web::Data<Arc<AppState>>) -> impl Responder {
     let map: tokio::sync::RwLockReadGuard<'_, std::collections::HashMap<String, Product>> = data.products.read().await;
-    let vals: Vec<&Product> = map.values().collect();
+    let vals: Vec<&Product> = map.values().filter(|product| product.status.is_public()).collect();
     HttpResponse::Ok().json(vals)
 }
 
@@ -408,6 +484,12 @@ pub async fn add_product(
         name: new_prod.name.clone(),
         price: new_prod.price,
         inventory: new_prod.inventory,
+        brand: new_prod.brand.clone(),
+        model: new_prod.model.clone(),
+        condition: new_prod.condition.clone(),
+        warranty: new_prod.warranty.clone(),
+        review_notes: new_prod.review_notes.clone(),
+        status: ReviewStatus::Review,
     };
     map.insert(new_prod.sku.clone(), product.clone());
 
