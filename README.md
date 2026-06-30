@@ -29,7 +29,7 @@ Run the application:
 cargo run
 ```
 
-Open your browser to `http://127.0.0.1:8080` to view the live product dashboard.
+Open your browser to `http://127.0.0.1:7878` to view the live product dashboard.
 
 ### API Endpoints
 
