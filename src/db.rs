@@ -57,23 +57,29 @@ pub fn load_products() -> SqlResult<HashMap<String, Product>> {
         "SELECT sku, id, name, price, inventory, brand, model, condition, warranty, review_notes, status FROM products",
     )?;
     let product_iter = stmt.query_map([], |row| {
-        let status_text: String = row.get(10)?;
+        let brand: Option<String> = row.get(5)?;
+        let model: Option<String> = row.get(6)?;
+        let condition: Option<String> = row.get(7)?;
+        let warranty: Option<String> = row.get(8)?;
+        let review_notes: Option<String> = row.get(9)?;
+        let status_text: Option<String> = row.get(10)?;
+
         Ok(Product {
             id: row.get(1)?,
             name: row.get(2)?,
             price: row.get(3)?,
             inventory: row.get(4)?,
-            brand: row.get(5)?,
-            model: row.get(6)?,
-            condition: row.get(7)?,
-            warranty: row.get(8)?,
-            review_notes: row.get(9)?,
-            status: match status_text.as_str() {
-                "draft" => ReviewStatus::Draft,
-                "review" => ReviewStatus::Review,
-                "approved" => ReviewStatus::Approved,
-                "rejected" => ReviewStatus::Rejected,
-                _ => ReviewStatus::Draft,
+            brand: brand.unwrap_or_else(|| "Unknown".to_string()),
+            model: model.unwrap_or_else(|| "Unknown".to_string()),
+            condition: condition.unwrap_or_else(|| "Unknown".to_string()),
+            warranty,
+            review_notes,
+            status: match status_text.as_deref() {
+                Some("draft") => ReviewStatus::Draft,
+                Some("review") => ReviewStatus::Review,
+                Some("approved") => ReviewStatus::Approved,
+                Some("rejected") => ReviewStatus::Rejected,
+                _ => ReviewStatus::Approved,
             },
         })
     })?;

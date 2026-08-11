@@ -286,7 +286,12 @@ pub async fn index() -> impl Responder {
         const data = JSON.parse(ev.data);
         if (data.type === 'update') {
           const p = data.product;
-          renderProduct(p);
+          if (p.status === 'approved') {
+            renderProduct(p);
+          } else {
+            const el = document.getElementById('p-' + p.id);
+            if (el) el.remove();
+          }
         }
       };
 
