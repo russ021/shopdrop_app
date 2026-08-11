@@ -6,6 +6,17 @@ use rusqlite::Connection;
 use serde_json;
 use std::sync::Arc;
 
+/// Serves the main web interface for Shopdrop.
+/// 
+/// **Endpoint:** `GET /`
+/// 
+/// Returns an HTML page with:
+/// - Real-time product listing with WebSocket updates
+/// - Add product form
+/// - Live price and inventory updates
+/// 
+/// **Response:**
+/// - `200 OK` - HTML page with embedded CSS and JavaScript
 #[get("/")]
 pub async fn index() -> impl Responder {
     log::info!("Serving index");
@@ -331,6 +342,20 @@ pub async fn index() -> impl Responder {
     HttpResponse::Ok().content_type("text/html; charset=utf-8").body(html)
 }
 
+/// WebSocket endpoint for real-time product updates.
+/// 
+/// **Endpoint:** `GET /ws`
+/// 
+/// Establishes a WebSocket connection that broadcasts:
+/// - Product updates (price changes, inventory adjustments)
+/// - New products added
+/// - Product reviews/status changes
+/// 
+/// **Message Format:** JSON with type="update" containing product data
+/// 
+/// **Response:**
+/// - `101 Switching Protocols` - WebSocket connection established
+/// - Sends updates as they happen in real-time
 pub async fn ws_index(
     req: actix_web::HttpRequest,
     stream: web::Payload,
@@ -341,6 +366,16 @@ pub async fn ws_index(
     ws::start(session, &req, stream)
 }
 
+/// Lists all products pending review.
+/// 
+/// **Endpoint:** `GET /api/products/pending`
+/// 
+/// Returns products with status="review" that need approval/rejection.
+/// Useful for admin/review interfaces.
+/// 
+/// **Response:**
+/// - `200 OK` - JSON array of Product objects with status="review"
+/// - `[]` - Empty array if no products pending
 pub async fn list_pending_products(data: web::Data<Arc<AppState>>) -> impl Responder {
     let map: tokio::sync::RwLockReadGuard<'_, std::collections::HashMap<String, Product>> = data.products.read().await;
     let vals: Vec<&Product> = map
@@ -349,7 +384,25 @@ pub async fn list_pending_products(data: web::Data<Arc<AppState>>) -> impl Respo
         .collect();
     HttpResponse::Ok().json(vals)
 }
-
+/// Approve or reject a product pending review.
+/// 
+/// **Endpoint:** `POST /api/review`
+/// 
+/// **Request Body:**
+/// ```json
+/// {
+///   "sku": "sku-101",
+///   "action": "approve" | "reject",
+///   "notes": "Optional reason for rejection"
+/// }
+/// ```
+/// 
+/// Updates product status to "approved" or "rejected" and broadcasts changes.
+/// 
+/// **Response:**
+/// - `200 OK` - Updated Product object
+/// - `404 Not Found` - SKU doesn't exist
+/// - `400 Bad Request` - Invalid action
 pub async fn review_product(
     review: web::Json<ReviewAction>,
     data: web::Data<Arc<AppState>>,
@@ -392,12 +445,60 @@ pub async fn review_product(
     }
 }
 
+/// Lists all approved products.
+/// 
+/// **Endpoint:** `GET /api/products`
+/// 
+/// Returns all products with status="approved" (public inventory).
+/// 
+/// **Query Parameters:** None
+/// 
+/// **Response:**
+/// - `200 OK` - JSON array of approved Product objects
+/// - `[]` - Empty array if no products approved yet
+/// 
+/// **Example Response:**
+/// ```json
+/// [
+///   {
+///     "id": "sku-101",
+///     "name": "Outlet Wireless Headphones",
+///     "price": 79.99,
+///     "inventory": 18,
+///     "brand": "Volt",
+///     "model": "VX-300",
+///     "condition": "Refurbished",
+///     "warranty": "90-day",
+///     "status": "approved"
+///   }
+/// ]
+/// ```
 pub async fn list_products(data: web::Data<Arc<AppState>>) -> impl Responder {
     let map: tokio::sync::RwLockReadGuard<'_, std::collections::HashMap<String, Product>> = data.products.read().await;
     let vals: Vec<&Product> = map.values().filter(|product| product.status.is_public()).collect();
     HttpResponse::Ok().json(vals)
 }
 
+/// Adjusts inventory for an existing product.
+/// 
+/// **Endpoint:** `POST /api/adjust`
+/// 
+/// **Request Body:**
+/// ```json
+/// {
+///   "sku": "sku-101",
+///   "delta": 5
+/// }
+/// ```
+/// 
+/// Delta can be positive (add stock) or negative (reduce stock).
+/// Inventory cannot go below 0 (uses saturating arithmetic).
+/// Updates database and broadcasts changes via WebSocket.
+/// 
+/// **Response:**
+/// - `200 OK` - Updated Product object with new inventory
+/// - `404 Not Found` - SKU doesn't exist
+/// - `400 Bad Request` - Invalid delta value
 pub async fn adjust_inventory(
     adj: web::Json<Adjust>,
     data: web::Data<Arc<AppState>>,
@@ -437,6 +538,25 @@ pub async fn adjust_inventory(
     }
 }
 
+/// Updates the price of an existing product.
+/// 
+/// **Endpoint:** `POST /api/price`
+/// 
+/// **Request Body:**
+/// ```json
+/// {
+///   "sku": "sku-101",
+///   "price": 89.99
+/// }
+/// ```
+/// 
+/// Price must be a positive number. Updates database and broadcasts
+/// changes via WebSocket to all connected clients in real-time.
+/// 
+/// **Response:**
+/// - `200 OK` - Updated Product object with new price
+/// - `404 Not Found` - SKU doesn't exist
+/// - `400 Bad Request` - Invalid price (negative or zero)
 pub async fn update_price(
     update: web::Json<PriceUpdate>,
     data: web::Data<Arc<AppState>>,
@@ -471,6 +591,34 @@ pub async fn update_price(
     }
 }
 
+/// Adds a new product to the inventory (initially in "review" status).
+/// 
+/// **Endpoint:** `POST /api/products`
+/// 
+/// **Request Body:**
+/// ```json
+/// {
+///   "sku": "sku-303",
+///   "name": "Outlet Tablet",
+///   "brand": "TechBrand",
+///   "model": "T-500",
+///   "condition": "Open-box",
+///   "price": 199.99,
+///   "inventory": 5,
+///   "warranty": "60-day",
+///   "review_notes": "Tested and working. Screen has minor scratches."
+/// }
+/// ```
+/// 
+/// All fields required. New products start with status="review" and must be
+/// approved via `/api/review` before appearing in `/api/products`.
+/// 
+/// Saves to database and broadcasts event via WebSocket.
+/// 
+/// **Response:**
+/// - `201 Created` - New Product object
+/// - `409 Conflict` - SKU already exists
+/// - `400 Bad Request` - Missing or invalid fields
 pub async fn add_product(
     new_prod: web::Json<NewProduct>,
     data: web::Data<Arc<AppState>>,
