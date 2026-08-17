@@ -29,8 +29,8 @@ pub async fn index() -> impl Responder {
     <title>Welcome to Shopdrop</title>
     <style>
       :root {
-        --primary-color: #4f46e5;
-        --secondary-color: #06b6d4;
+        --primary-color: #07530cff;
+        --secondary-color: #0bad1068;
         --background: #f8fafc;
         --card-bg: #ffffff;
         --text: #1e293b;
