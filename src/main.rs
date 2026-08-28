@@ -18,8 +18,12 @@ async fn main() -> std::io::Result<()> {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "DB init failed"));
     }
 
+    // Load persisted inventory before starting the server so the in-memory state
+    // is immediately available to both HTTP handlers and the simulator.
     let mut products_map = db::load_products().unwrap_or_default();
     if products_map.is_empty() {
+        // A fresh database gets a couple of approved products so the dashboard
+        // has useful content on its first launch.
         products_map.insert(
             "sku-101".to_string(),
             Product {
@@ -65,12 +69,14 @@ async fn main() -> std::io::Result<()> {
 
     let state = AppState::new();
     {
+        // Populate the lock before sharing state with request handlers.
         let mut map = state.products.write().await;
         *map = products_map;
     }
     let state = Arc::new(state);
 
-    // Start simulation
+    // Run inventory changes independently of the HTTP server. Updates are sent
+    // through the broadcaster so every connected dashboard receives them.
     let state_clone = state.clone();
     let tx_clone = state.broadcaster.clone();
     actix_rt::spawn(async move {

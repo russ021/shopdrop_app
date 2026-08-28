@@ -11,6 +11,8 @@ pub async fn start_simulation(state: Arc<AppState>, tx: broadcast::Sender<String
     let mut next_sku_id = 300;
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+        // Hold the write lock for one simulation tick so inventory changes and
+        // newly generated products are observed consistently by API requests.
         let mut map: tokio::sync::RwLockWriteGuard<'_, std::collections::HashMap<String, Product>> = state.products.write().await;
 
         if rng.random_bool(0.15) {
@@ -50,6 +52,7 @@ pub async fn start_simulation(state: Arc<AppState>, tx: broadcast::Sender<String
             let chosen = &templates[rng.random_range(0..templates.len())];
             let (name, brand, model, condition, warranty, price, inventory, notes) = chosen;
 
+            // Avoid flooding the review queue with duplicate pending templates.
             if map.values().any(|p| p.status == ReviewStatus::Review && p.name == *name) {
                 continue;
             }
@@ -83,6 +86,8 @@ pub async fn start_simulation(state: Arc<AppState>, tx: broadcast::Sender<String
             }
             let prod_clone = prod.clone();
             let sku_clone = sku.clone();
+            // rusqlite is synchronous, so database writes run off the async
+            // executor while the in-memory update is broadcast immediately.
             tokio::task::spawn_blocking(move || {
                 let conn = match Connection::open("shopdrop.db") {
                     Ok(c) => c,

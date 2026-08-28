@@ -13,7 +13,9 @@ impl Actor for WsSession {
         let addr = ctx.address();
         let mut rx = self.rx.resubscribe();
 
-        // Spawn a tokio task that forwards broadcast messages to this actor
+        // Bridge Tokio's broadcast channel into the Actix actor mailbox. Each
+        // connection gets its own receiver, so clients do not consume one
+        // another's updates.
         actix_rt::spawn(async move {
             loop {
                 match rx.recv().await {

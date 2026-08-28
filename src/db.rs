@@ -3,6 +3,7 @@ use rusqlite::{params, Connection, Result as SqlResult};
 use std::collections::{HashMap, HashSet};
 
 fn table_columns(conn: &Connection) -> SqlResult<HashSet<String>> {
+    // Inspect the existing schema so older databases can be upgraded in place.
     let mut stmt = conn.prepare("PRAGMA table_info(products)")?;
     let rows = stmt.query_map([], |row| row.get(1))?;
     let mut columns = HashSet::new();
@@ -41,6 +42,8 @@ pub fn init_db() -> SqlResult<()> {
         ("status", "TEXT"),
     ];
 
+    // Keep startup compatible with databases created before newer product
+    // metadata fields were introduced.
     for (column, ty) in required_columns {
         if !existing_columns.contains(column) {
             let sql = format!("ALTER TABLE products ADD COLUMN {} {}", column, ty);
@@ -57,6 +60,8 @@ pub fn load_products() -> SqlResult<HashMap<String, Product>> {
         "SELECT sku, id, name, price, inventory, brand, model, condition, warranty, review_notes, status FROM products",
     )?;
     let product_iter = stmt.query_map([], |row| {
+        // Nullable columns preserve compatibility with rows written by older
+        // versions of the app.
         let brand: Option<String> = row.get(5)?;
         let model: Option<String> = row.get(6)?;
         let condition: Option<String> = row.get(7)?;
@@ -87,6 +92,8 @@ pub fn load_products() -> SqlResult<HashMap<String, Product>> {
     let mut map = HashMap::new();
     for product in product_iter {
         let prod = product?;
+        // The map is keyed by the product id, which is also the public SKU in
+        // the current data model.
         map.insert(prod.id.clone(), prod);
     }
     Ok(map)

@@ -250,6 +250,8 @@ pub async fn index() -> impl Responder {
         const id = 'p-' + p.id;
         let el = document.getElementById(id);
         if (!el) {
+          // Reuse an existing card for updates; this prevents each WebSocket
+          // message from adding a duplicate product to the page.
           el = document.createElement('li');
           el.id = id;
           productList.appendChild(el);
@@ -286,6 +288,8 @@ pub async fn index() -> impl Responder {
         const data = JSON.parse(ev.data);
         if (data.type === 'update') {
           const p = data.product;
+          // Only approved products are public. Remove a card when a product
+          // changes back to a non-public review status.
           if (p.status === 'approved') {
             renderProduct(p);
           } else {
