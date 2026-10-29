@@ -364,15 +364,44 @@ pub async fn index() -> impl Responder {
 /// 
 /// **Response:**
 /// - `101 Switching Protocols` - WebSocket connection established
+/// - `403 Forbidden` - Request origin is not the local Shopdrop origin
 /// - Sends updates as they happen in real-time
 pub async fn ws_index(
     req: actix_web::HttpRequest,
     stream: web::Payload,
     data: web::Data<Arc<AppState>>,
 ) -> Result<actix_web::HttpResponse, actix_web::Error> {
+    let connection = req.connection_info();
+    let origin = req
+        .headers()
+        .get(actix_web::http::header::ORIGIN)
+        .and_then(|value| value.to_str().ok());
+    if !is_allowed_ws_origin(origin, connection.scheme(), connection.host()) {
+        return Ok(HttpResponse::Forbidden().finish());
+    }
+
     let rx = data.broadcaster.subscribe();
     let session = crate::websocket::WsSession { rx };
     ws::start(session, &req, stream)
+}
+
+fn is_allowed_ws_origin(origin: Option<&str>, scheme: &str, host: &str) -> bool {
+    if !matches!(scheme, "http" | "https") {
+        return false;
+    }
+
+    let Ok(authority) = host.parse::<actix_web::http::uri::Authority>() else {
+        return false;
+    };
+    if !matches!(
+        authority.host().to_ascii_lowercase().as_str(),
+        "localhost" | "127.0.0.1"
+    ) {
+        return false;
+    }
+
+    let expected_origin = format!("{scheme}://{authority}");
+    origin == Some(expected_origin.as_str())
 }
 
 /// Lists all products pending review.
@@ -672,4 +701,39 @@ pub async fn add_product(
     }
 
     Ok(HttpResponse::Created().json(product))
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_ws_origin;
+
+    #[test]
+    fn allows_same_origin_loopback_connections() {
+        assert!(is_allowed_ws_origin(
+            Some("http://127.0.0.1:7878"),
+            "http",
+            "127.0.0.1:7878"
+        ));
+        assert!(is_allowed_ws_origin(
+            Some("http://localhost:7878"),
+            "http",
+            "localhost:7878"
+        ));
+    }
+
+    #[test]
+    fn rejects_cross_origin_and_non_loopback_connections() {
+        assert!(!is_allowed_ws_origin(
+            Some("http://attacker.example"),
+            "http",
+            "127.0.0.1:7878"
+        ));
+        assert!(!is_allowed_ws_origin(
+            Some("http://attacker.example"),
+            "http",
+            "attacker.example"
+        ));
+        assert!(!is_allowed_ws_origin(None, "http", "127.0.0.1:7878"));
+    }
 }
